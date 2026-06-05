@@ -16,8 +16,8 @@ export type SourceItem = {
 
 export type LifecycleEvent = {
   type: string;
-  ts: number;
-  [key: string]: unknown;
+  timestamp: string;
+  payload: Record<string, unknown>;
 };
 
 export type RunSnapshot = {

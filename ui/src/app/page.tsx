@@ -16,7 +16,7 @@ export default function Home() {
           </span>
         </h1>
         <p className="max-w-2xl text-lg leading-relaxed text-[var(--muted)]">
-          CV Critic Agent runs a CrewAI pipeline that critiques a software architect's
+          CV Critic Agent runs a CrewAI pipeline that critiques a software architect&apos;s
           portfolio from three angles. This page streams every lifecycle event over
           Server-Sent Events and animates the dependency graph as the work flows.
         </p>

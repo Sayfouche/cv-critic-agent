@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { RunDashboard } from "@/components/RunDashboard";
 
 type Params = Promise<{ id: string }>;
 
@@ -23,9 +24,7 @@ export default async function RunPage({ params }: { params: Params }) {
         </div>
       </header>
 
-      <div className="flex flex-1 items-center justify-center py-24 text-sm text-[var(--muted)]">
-        Live graph coming in commit 2 — for now the SSE stream is being recorded server-side.
-      </div>
+      <RunDashboard runId={id} />
     </main>
   );
 }
