@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Protocol
+from typing import Any, Protocol
 
 DEFAULT_PROVIDER = "mistral"
 DEFAULT_MISTRAL_MODEL = "mistral-medium-latest"
@@ -48,15 +48,56 @@ def _extract_mistral_content(response: object) -> str:
     return str(content).strip()
 
 
+def _load_mistral_client_class() -> type:
+    try:
+        from mistralai.client import Mistral
+
+        return Mistral
+    except ImportError:
+        try:
+            from mistralai import Mistral
+
+            return Mistral
+        except ImportError as exc:
+            raise RuntimeError("Install mistralai or run with --mock.") from exc
+
+
+def _plain_text_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if text:
+                    parts.append(str(text))
+            else:
+                text = getattr(item, "text", None) or getattr(item, "content", None)
+                if text:
+                    parts.append(str(text))
+        return "\n".join(parts)
+    return str(content)
+
+
+def clean_mistral_messages(messages: str | list[dict[str, Any]]) -> list[dict[str, str]]:
+    if isinstance(messages, str):
+        return [{"role": "user", "content": messages}]
+
+    cleaned: list[dict[str, str]] = []
+    for message in messages:
+        role = str(message.get("role", "user"))
+        if role not in {"system", "user", "assistant", "tool"}:
+            role = "user"
+        cleaned.append({"role": role, "content": _plain_text_content(message.get("content", ""))})
+    return cleaned
+
+
 class MistralTextLLM:
     def __init__(self) -> None:
-        try:
-            from mistralai.client import Mistral
-        except ImportError:
-            try:
-                from mistralai import Mistral
-            except ImportError as exc:
-                raise RuntimeError("Install mistralai or run with --mock.") from exc
+        Mistral = _load_mistral_client_class()
 
         api_key = os.getenv("MISTRAL_API_KEY")
         if not api_key:
@@ -73,6 +114,72 @@ class MistralTextLLM:
             max_tokens=5000,
         )
         return _extract_mistral_content(response)
+
+
+try:
+    from crewai.llms.base_llm import BaseLLM
+except ImportError:
+    BaseLLM = None  # type: ignore[assignment]
+
+
+if BaseLLM is not None:
+
+    class MistralCrewLLM(BaseLLM):
+        """CrewAI-native LLM adapter that calls Mistral directly.
+
+        CrewAI's LiteLLM path currently forwards internal cache fields that the
+        Mistral API rejects. This adapter keeps the CrewAI Agent/Task/Crew model
+        while sending only Mistral-supported message fields.
+        """
+
+        provider: str = "mistral"
+
+        def __init__(
+            self,
+            model: str | None = None,
+            api_key: str | None = None,
+            temperature: float = 0.2,
+            max_tokens: int = 5000,
+        ) -> None:
+            resolved_api_key = api_key or os.getenv("MISTRAL_API_KEY")
+            if not resolved_api_key:
+                raise RuntimeError("MISTRAL_API_KEY is required unless --mock is used.")
+
+            super().__init__(
+                model=model or os.getenv("CV_CRITIC_MODEL", DEFAULT_MISTRAL_MODEL),
+                api_key=resolved_api_key,
+                temperature=temperature,
+                provider="mistral",
+                additional_params={"max_tokens": max_tokens},
+            )
+            Mistral = _load_mistral_client_class()
+            object.__setattr__(self, "_client", Mistral(api_key=resolved_api_key))
+
+        def call(
+            self,
+            messages: str | list[dict[str, Any]],
+            tools: list[dict[str, Any]] | None = None,
+            callbacks: list[Any] | None = None,
+            available_functions: dict[str, Any] | None = None,
+            from_task: Any | None = None,
+            from_agent: Any | None = None,
+            response_model: type[Any] | None = None,
+        ) -> str:
+            if tools:
+                raise RuntimeError("MistralCrewLLM does not support CrewAI tool calls for this agent.")
+            if response_model:
+                raise RuntimeError("MistralCrewLLM does not support response_model for this agent.")
+
+            response = self._client.chat.complete(
+                model=self.model,
+                messages=clean_mistral_messages(messages),
+                temperature=self.temperature,
+                max_tokens=int(self.additional_params.get("max_tokens", 5000)),
+            )
+            return self._apply_stop_words(_extract_mistral_content(response))
+
+else:
+    MistralCrewLLM = None  # type: ignore[assignment]
 
 
 class AnthropicTextLLM:

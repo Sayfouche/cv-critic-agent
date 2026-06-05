@@ -8,6 +8,17 @@ from pathlib import Path
 REPORT_FILES = ["global.md", "printable-cv.md", "strategy.md", "summary.md"]
 
 
+def strip_markdown_fence(content: str) -> str:
+    text = content.strip()
+    if text.startswith("```markdown"):
+        text = text.removeprefix("```markdown").strip()
+    elif text.startswith("```"):
+        text = text.removeprefix("```").strip()
+    if text.endswith("```"):
+        text = text.removesuffix("```").strip()
+    return text
+
+
 def timestamp(now: datetime | None = None) -> str:
     value = now or datetime.now(timezone.utc)
     if value.tzinfo is None:
@@ -23,7 +34,7 @@ def create_run_dir(root: Path, now: datetime | None = None) -> Path:
 
 
 def write_report(root: Path, run_dir: Path, slug: str, content: str) -> Path:
-    text = content.strip() + "\n"
+    text = strip_markdown_fence(content) + "\n"
     run_path = run_dir / f"{slug}.md"
     latest_path = root / "reports" / "latest" / f"{slug}.md"
     run_path.write_text(text, encoding="utf-8")

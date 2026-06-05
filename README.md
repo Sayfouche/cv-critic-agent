@@ -64,6 +64,8 @@ Pour un run reel, copier `.env.example` vers `.env.local` puis executer :
 PYTHONPATH=src python -m cv_critic_agent.main
 ```
 
+La version CrewAI native utilise un adaptateur `BaseLLM` Mistral direct pour eviter les champs internes non supportes par l'API Mistral.
+
 ## Tests
 
 ```bash

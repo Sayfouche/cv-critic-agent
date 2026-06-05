@@ -10,8 +10,9 @@ from pathlib import Path
 
 from cv_critic_agent.main import run as run_native
 from cv_critic_agent.prompts import build_critic_prompt, build_strategy_prompt
+from cv_critic_agent.reports import strip_markdown_fence
 from cv_critic_agent.sources import REPORT_SPECS
-from cv_critic_agent.llm import create_text_llm
+from cv_critic_agent.llm import clean_mistral_messages, create_text_llm
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -110,6 +111,25 @@ class WorkflowTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "mistralai|MISTRAL_API_KEY"):
             create_text_llm()
+
+    def test_mistral_message_cleaner_removes_crewai_internal_fields(self) -> None:
+        cleaned = clean_mistral_messages(
+            [
+                {"role": "system", "content": "System prompt", "cache_breakpoint": True},
+                {"role": "user", "content": [{"type": "text", "text": "User prompt"}], "cache_breakpoint": True},
+            ]
+        )
+
+        self.assertEqual(
+            cleaned,
+            [
+                {"role": "system", "content": "System prompt"},
+                {"role": "user", "content": "User prompt"},
+            ],
+        )
+
+    def test_report_writer_strips_markdown_fences(self) -> None:
+        self.assertEqual(strip_markdown_fence("```markdown\n# Title\n```"), "# Title")
 
     @staticmethod
     def restore_env(values: dict[str, str | None]) -> None:

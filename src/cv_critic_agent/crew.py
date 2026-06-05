@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 import os
 
-from cv_critic_agent.llm import DEFAULT_ANTHROPIC_MODEL, DEFAULT_MISTRAL_MODEL, MockLLM
+from cv_critic_agent.llm import (
+    DEFAULT_ANTHROPIC_MODEL,
+    DEFAULT_MISTRAL_MODEL,
+    MistralCrewLLM,
+    MockLLM,
+)
 from cv_critic_agent.paths import project_root
 from cv_critic_agent.prompts import build_critic_prompt, build_strategy_prompt
 from cv_critic_agent.reports import create_run_dir, write_report, write_summary
@@ -34,8 +39,13 @@ class CVCriticCrew:
         provider = os.getenv("CV_CRITIC_PROVIDER", "mistral").strip().lower()
         default_model = DEFAULT_ANTHROPIC_MODEL if provider == "anthropic" else DEFAULT_MISTRAL_MODEL
         model = os.getenv("CV_CRITIC_MODEL", default_model)
-        crew_model = f"{provider}/{model}" if "/" not in model else model
-        llm = LLM(model=crew_model, temperature=0.2, max_tokens=5000)
+        if provider == "mistral":
+            if MistralCrewLLM is None:
+                raise RuntimeError("Install crewai and mistralai or run with --mock.")
+            llm = MistralCrewLLM(model=model, temperature=0.2, max_tokens=5000)
+        else:
+            crew_model = f"{provider}/{model}" if "/" not in model else model
+            llm = LLM(model=crew_model, temperature=0.2, max_tokens=5000)
         global_critic = Agent(
             role="External Portfolio Critic",
             goal="Audit the public CV, portfolio and chatbot for credibility and perception risks.",
@@ -71,11 +81,12 @@ class CVCriticCrew:
             agent=strategy,
             context=[task_global, task_cv],
         )
+        verbose = os.getenv("CV_CRITIC_VERBOSE", "0").strip().lower() in {"1", "true", "yes"}
         return Crew(
             agents=[global_critic, cv_critic, strategy],
             tasks=[task_global, task_cv, task_strategy],
             process=Process.sequential,
-            verbose=True,
+            verbose=verbose,
         )
 
     def kickoff(self) -> Path:
