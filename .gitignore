@@ -1,0 +1,12 @@
+.env
+.env.local
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+reports/*
+!reports/.gitkeep
+!reports/latest/
+reports/latest/*
+!reports/latest/.gitkeep

@@ -1,0 +1,21 @@
+[project]
+name = "cv-critic-agent"
+version = "0.1.0"
+description = "CrewAI-native CV critic agent with legacy Node.js and migration script implementations."
+requires-python = ">=3.11"
+dependencies = [
+  "anthropic>=0.40.0",
+  "crewai>=0.80.0",
+  "crewai-tools>=0.20.0",
+  "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+cv-critic-agent = "cv_critic_agent.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
