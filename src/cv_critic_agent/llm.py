@@ -3,6 +3,27 @@ from __future__ import annotations
 import os
 from typing import Any, Protocol
 
+from cv_critic_agent.mistral_utils import (
+    clean_mistral_messages,
+    extract_mistral_content,
+    load_mistral_client_class,
+)
+
+__all__ = [
+    "DEFAULT_PROVIDER",
+    "DEFAULT_MISTRAL_MODEL",
+    "DEFAULT_ANTHROPIC_MODEL",
+    "DEFAULT_MOCK_RESPONSES",
+    "DEFAULT_MOCK_FALLBACK",
+    "TextLLM",
+    "MockLLM",
+    "MistralTextLLM",
+    "MistralCrewLLM",
+    "AnthropicTextLLM",
+    "create_text_llm",
+    "clean_mistral_messages",
+]
+
 DEFAULT_PROVIDER = "mistral"
 DEFAULT_MISTRAL_MODEL = "mistral-medium-latest"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
@@ -56,71 +77,9 @@ def create_text_llm() -> TextLLM:
     raise RuntimeError(f"Unsupported CV_CRITIC_PROVIDER: {provider}")
 
 
-def _extract_mistral_content(response: object) -> str:
-    choice = response.choices[0]
-    content = choice.message.content
-    if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        parts = []
-        for item in content:
-            text = getattr(item, "text", None)
-            if text:
-                parts.append(text)
-        return "\n\n".join(parts).strip()
-    return str(content).strip()
-
-
-def _load_mistral_client_class() -> type:
-    try:
-        from mistralai.client import Mistral
-
-        return Mistral
-    except ImportError:
-        try:
-            from mistralai import Mistral
-
-            return Mistral
-        except ImportError as exc:
-            raise RuntimeError("Install mistralai or run with --mock.") from exc
-
-
-def _plain_text_content(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict):
-                text = item.get("text") or item.get("content")
-                if text:
-                    parts.append(str(text))
-            else:
-                text = getattr(item, "text", None) or getattr(item, "content", None)
-                if text:
-                    parts.append(str(text))
-        return "\n".join(parts)
-    return str(content)
-
-
-def clean_mistral_messages(messages: str | list[dict[str, Any]]) -> list[dict[str, str]]:
-    if isinstance(messages, str):
-        return [{"role": "user", "content": messages}]
-
-    cleaned: list[dict[str, str]] = []
-    for message in messages:
-        role = str(message.get("role", "user"))
-        if role not in {"system", "user", "assistant", "tool"}:
-            role = "user"
-        cleaned.append({"role": role, "content": _plain_text_content(message.get("content", ""))})
-    return cleaned
-
-
 class MistralTextLLM:
     def __init__(self) -> None:
-        Mistral = _load_mistral_client_class()
+        Mistral = load_mistral_client_class()
 
         api_key = os.getenv("MISTRAL_API_KEY")
         if not api_key:
@@ -136,7 +95,7 @@ class MistralTextLLM:
             temperature=0.2,
             max_tokens=5000,
         )
-        return _extract_mistral_content(response)
+        return extract_mistral_content(response)
 
 
 try:
@@ -175,7 +134,7 @@ if BaseLLM is not None:
                 provider="mistral",
                 additional_params={"max_tokens": max_tokens},
             )
-            Mistral = _load_mistral_client_class()
+            Mistral = load_mistral_client_class()
             object.__setattr__(self, "_client", Mistral(api_key=resolved_api_key))
 
         def call(
@@ -199,7 +158,7 @@ if BaseLLM is not None:
                 temperature=self.temperature,
                 max_tokens=int(self.additional_params.get("max_tokens", 5000)),
             )
-            return self._apply_stop_words(_extract_mistral_content(response))
+            return self._apply_stop_words(extract_mistral_content(response))
 
 else:
     MistralCrewLLM = None  # type: ignore[assignment]

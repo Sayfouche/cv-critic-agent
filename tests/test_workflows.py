@@ -95,6 +95,7 @@ class WorkflowTests(unittest.TestCase):
         )
         self.assert_contract(root)
 
+    @unittest.skipUnless(shutil.which("node"), "Node.js runtime not available")
     def test_node_legacy_mock_contract(self) -> None:
         root = make_fixture_root()
         self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))

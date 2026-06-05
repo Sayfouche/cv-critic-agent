@@ -37,6 +37,10 @@ class CVCriticCrew:
             return None
 
         provider = os.getenv("CV_CRITIC_PROVIDER", "mistral").strip().lower()
+        if provider not in {"mistral", "anthropic"}:
+            raise RuntimeError(
+                f"Unsupported CV_CRITIC_PROVIDER={provider!r}. Expected one of: mistral, anthropic."
+            )
         default_model = DEFAULT_ANTHROPIC_MODEL if provider == "anthropic" else DEFAULT_MISTRAL_MODEL
         model = os.getenv("CV_CRITIC_MODEL", default_model)
         if provider == "mistral":
