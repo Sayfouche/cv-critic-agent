@@ -40,7 +40,25 @@ Apres installation du package, la commande exposee est :
 cv-critic-agent --mock
 ```
 
-Pour un run reel, copier `.env.example` vers `.env.local` ou exporter `ANTHROPIC_API_KEY`, puis executer :
+## Fournisseur LLM
+
+Le fournisseur est parametrable par variables d'environnement. Par defaut, le repo utilise Mistral :
+
+```bash
+CV_CRITIC_PROVIDER=mistral
+CV_CRITIC_MODEL=mistral-medium-latest
+MISTRAL_API_KEY=...
+```
+
+Anthropic reste disponible pour comparaison :
+
+```bash
+CV_CRITIC_PROVIDER=anthropic
+CV_CRITIC_MODEL=claude-haiku-4-5-20251001
+ANTHROPIC_API_KEY=...
+```
+
+Pour un run reel, copier `.env.example` vers `.env.local` puis executer :
 
 ```bash
 PYTHONPATH=src python -m cv_critic_agent.main

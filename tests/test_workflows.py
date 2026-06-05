@@ -11,6 +11,7 @@ from pathlib import Path
 from cv_critic_agent.main import run as run_native
 from cv_critic_agent.prompts import build_critic_prompt, build_strategy_prompt
 from cv_critic_agent.sources import REPORT_SPECS
+from cv_critic_agent.llm import create_text_llm
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -100,6 +101,23 @@ class WorkflowTests(unittest.TestCase):
             check=True,
         )
         self.assert_contract(root)
+
+    def test_mistral_is_default_real_provider(self) -> None:
+        original = {key: os.environ.get(key) for key in ["CV_CRITIC_PROVIDER", "CV_CRITIC_MODEL", "MISTRAL_API_KEY"]}
+        self.addCleanup(lambda: self.restore_env(original))
+        for key in original:
+            os.environ.pop(key, None)
+
+        with self.assertRaisesRegex(RuntimeError, "mistralai|MISTRAL_API_KEY"):
+            create_text_llm()
+
+    @staticmethod
+    def restore_env(values: dict[str, str | None]) -> None:
+        for key, value in values.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 if __name__ == "__main__":

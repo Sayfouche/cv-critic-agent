@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
-from cv_critic_agent.llm import MockLLM
+from cv_critic_agent.llm import DEFAULT_ANTHROPIC_MODEL, DEFAULT_MISTRAL_MODEL, MockLLM
 from cv_critic_agent.paths import project_root
 from cv_critic_agent.prompts import build_critic_prompt, build_strategy_prompt
 from cv_critic_agent.reports import create_run_dir, write_report, write_summary
@@ -30,7 +31,11 @@ class CVCriticCrew:
         if self.mock:
             return None
 
-        llm = LLM(model="anthropic/claude-haiku-4-5-20251001", temperature=0.2, max_tokens=5000)
+        provider = os.getenv("CV_CRITIC_PROVIDER", "mistral").strip().lower()
+        default_model = DEFAULT_ANTHROPIC_MODEL if provider == "anthropic" else DEFAULT_MISTRAL_MODEL
+        model = os.getenv("CV_CRITIC_MODEL", default_model)
+        crew_model = f"{provider}/{model}" if "/" not in model else model
+        llm = LLM(model=crew_model, temperature=0.2, max_tokens=5000)
         global_critic = Agent(
             role="External Portfolio Critic",
             goal="Audit the public CV, portfolio and chatbot for credibility and perception risks.",

@@ -4,12 +4,15 @@ import argparse
 from pathlib import Path
 
 from cv_critic_agent.crew import CVCriticCrew
+from cv_critic_agent.env import load_env
 from cv_critic_agent.paths import project_root
 
 
 def run(mock: bool = False, root: Path | None = None) -> Path:
     """Official CrewAI-native entrypoint surface."""
-    return CVCriticCrew(root=root or project_root(), mock=mock).kickoff()
+    resolved_root = root or project_root()
+    load_env(resolved_root)
+    return CVCriticCrew(root=resolved_root, mock=mock).kickoff()
 
 
 def main() -> None:
