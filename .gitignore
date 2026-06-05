@@ -11,3 +11,6 @@ reports/*
 !reports/latest/
 reports/latest/*
 !reports/latest/.gitkeep
+
+# Private working notes — kept out of public repo
+working-notes.md

@@ -32,8 +32,7 @@ Contraintes :
 {sources}"""
 
 
-def build_strategy_prompt(root: Path, reports: dict[str, str]) -> str:
-    return f"""Tu es CV Strategy Agent, un agent de synthese strategique.
+STRATEGY_HEADER = """Tu es CV Strategy Agent, un agent de synthese strategique.
 
 Tu ne critiques pas directement le CV depuis les sources. Tu lis :
 1. Le contexte utilisateur du run
@@ -67,10 +66,24 @@ Contraintes :
 - Ne propose pas de tout refaire.
 - Ne demande pas d'inventer des chiffres.
 - Si une preuve manque, propose soit de demander l'information, soit de reformuler plus prudemment.
-- Sois oriente execution.
+- Sois oriente execution."""
+
+
+def build_strategy_prompt_header(root: Path) -> str:
+    """Strategy prompt without report contents.
+
+    Used by the CrewAI-native path: CrewAI injects the two critique reports
+    automatically via `context=[task_global, task_cv]`, so we only need to
+    prepend the role/format prompt and the user context file.
+    """
+    return f"""{STRATEGY_HEADER}
 
 --- CONTEXTE UTILISATEUR ---
-{read_context(root)}
+{read_context(root)}"""
+
+
+def build_strategy_prompt(root: Path, reports: dict[str, str]) -> str:
+    return f"""{build_strategy_prompt_header(root)}
 
 --- RAPPORT GLOBAL ---
 {reports["global"]}

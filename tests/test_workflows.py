@@ -9,7 +9,11 @@ import unittest
 from pathlib import Path
 
 from cv_critic_agent.main import run as run_native
-from cv_critic_agent.prompts import build_critic_prompt, build_strategy_prompt
+from cv_critic_agent.prompts import (
+    build_critic_prompt,
+    build_strategy_prompt,
+    build_strategy_prompt_header,
+)
 from cv_critic_agent.reports import strip_markdown_fence
 from cv_critic_agent.sources import REPORT_SPECS
 from cv_critic_agent.llm import clean_mistral_messages, create_text_llm
@@ -130,6 +134,30 @@ class WorkflowTests(unittest.TestCase):
 
     def test_report_writer_strips_markdown_fences(self) -> None:
         self.assertEqual(strip_markdown_fence("```markdown\n# Title\n```"), "# Title")
+
+    def test_strategy_prompt_includes_context_in_all_implementations(self) -> None:
+        """Regression guard — every strategy entry point must inject context.md."""
+        root = make_fixture_root()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+
+        # 1. CrewAI-native path uses build_strategy_prompt_header (reports come via context=)
+        crewai_native_prompt = build_strategy_prompt_header(root)
+        self.assertIn("STRATEGY_CONTEXT_SENTINEL", crewai_native_prompt)
+
+        # 2. Shared workflow (script + tests) uses build_strategy_prompt
+        full_prompt = build_strategy_prompt(
+            root,
+            {
+                "global": "# Rapport critique global\nGLOBAL_REPORT_SENTINEL",
+                "printable-cv": "# Rapport critique CV imprimable\nPRINTABLE_REPORT_SENTINEL",
+            },
+        )
+        self.assertIn("STRATEGY_CONTEXT_SENTINEL", full_prompt)
+        self.assertIn("GLOBAL_REPORT_SENTINEL", full_prompt)
+        self.assertIn("PRINTABLE_REPORT_SENTINEL", full_prompt)
+
+        # 3. Header must be a strict prefix of the full prompt (parity guarantee)
+        self.assertTrue(full_prompt.startswith(crewai_native_prompt))
 
     @staticmethod
     def restore_env(values: dict[str, str | None]) -> None:

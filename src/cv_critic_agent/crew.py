@@ -10,7 +10,7 @@ from cv_critic_agent.llm import (
     MockLLM,
 )
 from cv_critic_agent.paths import project_root
-from cv_critic_agent.prompts import build_critic_prompt, build_strategy_prompt
+from cv_critic_agent.prompts import build_critic_prompt, build_strategy_prompt_header
 from cv_critic_agent.reports import create_run_dir, write_report, write_summary
 from cv_critic_agent.sources import REPORT_SPECS
 
@@ -76,7 +76,7 @@ class CVCriticCrew:
             agent=cv_critic,
         )
         task_strategy = Task(
-            description="Synthesize the two previous task outputs using context.md.",
+            description=build_strategy_prompt_header(self.root),
             expected_output="Markdown report: # Strategie CV",
             agent=strategy,
             context=[task_global, task_cv],

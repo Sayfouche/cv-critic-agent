@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-
-
-REPORT_FILES = ["global.md", "printable-cv.md", "strategy.md", "summary.md"]
 
 
 def strip_markdown_fence(content: str) -> str:
@@ -54,12 +50,3 @@ def write_summary(root: Path, run_dir: Path, generated: list[dict[str, str]]) ->
         "",
     ]
     write_report(root, run_dir, "summary", "\n".join(lines))
-
-
-def update_latest_from_run(root: Path, run_dir: Path) -> None:
-    latest = root / "reports" / "latest"
-    latest.mkdir(parents=True, exist_ok=True)
-    for file_name in REPORT_FILES:
-        source = run_dir / file_name
-        if source.exists():
-            shutil.copyfile(source, latest / file_name)
