@@ -5,7 +5,7 @@ export const knowledge = {
   contact: {
     phone: process.env.CONTACT_PHONE ?? "+33 7 81 •• •• ••",
     email: "mansour.saifallah@gmail.com",
-    linkedin: "https://www.linkedin.com/in/saifallah-mansour-18078525/",
+    linkedin: "https://www.linkedin.com/in/sa%C3%AFfallah-mansour-18078525/",
     availability: "Disponible avec 1 mois de préavis",
     location: "Paris — remote partiel possible",
     tjm: "À discuter selon le contexte de la mission",
@@ -115,7 +115,8 @@ Lecture tactique :
   projectPositioning: `
 Positionnement des projets IA :
 - SAIF-IA Chatbot est le projet public de portfolio. Son objectif est commercial/recruteur : qualifier, présenter, adapter le discours et orienter vers le contact.
-- CV Critic Agent est un agent interne distinct. Son objectif est volontairement opposé : critiquer le CV, détecter les faiblesses, challenger la crédibilité IA et générer des rapports versionnés.
+- CV Critic Agent est un agent interne distinct, extrait dans un repo autonome. Son objectif est volontairement opposé : critiquer le CV, détecter les faiblesses, challenger la crédibilité IA et générer des rapports versionnés.
+- CV Critic Agent démontre une migration technique complète : orchestration Node.js manuelle avec Anthropic SDK → script Python CrewAI → projet CrewAI native autonome, avec refactoring des prompts/sources/rapports, provider Mistral par défaut et tests de non-régression mock.
 - Ne pas mélanger SAIF-IA et CV Critic : l'un vend intelligemment, l'autre critique durement pour améliorer le positionnement.
 - Resell Radar doit être présenté prudemment comme veille automatisée d'annonces publiques et scoring IA. Ne jamais le vendre comme scraping agressif ou contournement de plateformes.
 - Pour Resell Radar, insister sur collecte contrôlée, respect des limites, usages raisonnables, scoring métier, alerting et aide à la décision.

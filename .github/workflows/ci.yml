@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ── Job 1 : Lint (ruff) ─────────────────────────────────────────────────────
+  lint:
+    name: Ruff lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff
+        run: ruff check src tests scripts
+
+  # ── Job 2 : Tests (pytest with mocked LLM) ──────────────────────────────────
+  tests:
+    name: Mock tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Run unittest
+        run: PYTHONPATH=src python -m unittest discover -s tests -v
+
+  # ── Job 3 : Sources drift check ─────────────────────────────────────────────
+  # Optional: ensures sources/ files match the cv-portfolio they snapshot from.
+  # Skipped if CV_PORTFOLIO_REF secret is not set.
+  sources-drift:
+    name: Sources drift check
+    runs-on: ubuntu-latest
+    if: false  # Disabled until cv-portfolio is fetched in CI — enable by removing this line.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Drift check
+        run: python scripts/sync_sources.py --check

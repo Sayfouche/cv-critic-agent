@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 GLOBAL_SOURCES = [
     "sources/data.ts",
     "sources/chatbot-knowledge.ts",
@@ -98,6 +97,14 @@ Propose les elements a couper, condenser ou reformuler dans le CV imprimable.
 Donne 5 a 8 actions concretes pour ameliorer uniquement le CV telechargeable.""",
     ),
 ]
+
+
+def spec_by_slug(slug: str) -> ReportSpec:
+    """Lookup a ReportSpec by slug — avoids fragile list-index access."""
+    for spec in REPORT_SPECS:
+        if spec.slug == slug:
+            return spec
+    raise KeyError(f"No ReportSpec with slug={slug!r}. Available: {[s.slug for s in REPORT_SPECS]}")
 
 
 def read_source_files(root: Path, relative_paths: list[str] | tuple[str, ...]) -> str:

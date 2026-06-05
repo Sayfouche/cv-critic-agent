@@ -8,7 +8,7 @@ export const personal = {
   subtitle: ".NET · Python · Cloud · Distributed Systems · Applied AI",
   email: "mansour.saifallah@gmail.com",
   phone: "07 81 •• •• 77",
-  linkedin: "https://www.linkedin.com/in/saifallah-mansour-18078525/",
+  linkedin: "https://www.linkedin.com/in/sa%C3%AFfallah-mansour-18078525/",
   github: "https://github.com/Sayfouche/",
   location: "Paris",
   availabilityFr: "Disponible avec 1 mois de préavis",
@@ -411,14 +411,15 @@ export const projects: Project[] = [
   // ── 3. Dual implementation, versioned reports ─────────────────────────────
   {
     name: "CV Critic Agent",
-    descFr: "Workflow IA interne d'audit du CV — migré de Node.js/Anthropic SDK vers CrewAI (Python) : 3 agents (Global Critic · Printable CV Critic · Strategy), roles/backstories formalisés, injection de contexte inter-tâches, rapports versionnés.",
-    descEn: "Internal AI CV audit workflow — migrated from Node.js/Anthropic SDK to CrewAI (Python): 3 agents (Global Critic · Printable CV Critic · Strategy), formalised roles/backstories, inter-task context injection, versioned reports.",
-    stack: ["CrewAI", "Python", "LiteLLM", "Node.js", "Claude API", "Prompt Engineering", "Markdown Reports", "Versioned Outputs"],
+    descFr: "Agent IA autonome d'audit du CV — migré d'une orchestration Node.js manuelle vers un repo Python CrewAI native : 3 agents spécialisés, refactoring des prompts/sources/rapports, provider Mistral par défaut, tests de non-régression et rapports versionnés.",
+    descEn: "Standalone AI CV audit agent — migrated from manual Node.js orchestration to a native Python CrewAI repo: 3 specialist agents, prompts/sources/reports refactoring, Mistral as default provider, regression tests and versioned reports.",
+    stack: ["CrewAI", "Python", "Mistral API", "BaseLLM Adapter", "Node.js", "Anthropic API", "Prompt Engineering", "Regression Tests", "Markdown Reports"],
     highlights: [
-      { fr: "Migration orchestration Node.js → CrewAI Python : mêmes 3 agents, rôles/backstories formalisés, context passing automatique via CrewAI", en: "Node.js → CrewAI Python orchestration migration: same 3 agents, formalised roles/backstories, automatic context passing via CrewAI" },
-      { fr: "Critics intentionnellement indépendants (pas de context= entre eux) — seul le Strategy Agent lit les deux outputs", en: "Critics intentionally independent (no context= between them) — only the Strategy Agent reads both outputs" },
-      { fr: "Rapports datés + latest/ pour suivre les itérations · deux commandes npm : critique-cv (Node.js) et critique-cv-crew (CrewAI)", en: "Timestamped reports + latest/ to track iterations · two npm commands: critique-cv (Node.js) and critique-cv-crew (CrewAI)" },
+      { fr: "Migration en 3 étapes : Node.js legacy → script CrewAI Python → projet CrewAI native autonome, avec contrat de sortie stable", en: "3-step migration: Node.js legacy → Python CrewAI script → standalone native CrewAI project, with a stable output contract" },
+      { fr: "Refactoring des responsabilités : prompts, sources, providers LLM, génération reports/<timestamp>/ et reports/latest/ centralisés", en: "Responsibility refactoring: prompts, sources, LLM providers, reports/<timestamp>/ and reports/latest/ generation centralised" },
+      { fr: "Tests mock sans appel API : séparation critics/strategy, parité des 3 implémentations et non-régression latest/", en: "Mock tests without API calls: critics/strategy separation, parity across 3 implementations and latest/ regression coverage" },
     ],
+    github: "https://github.com/Sayfouche/cv-critic-agent",
     docs: [
       { labelFr: "Fiche technique", labelEn: "Technical sheet", url: "/docs/cv-critic-technique.html" },
       { labelFr: "Manuel d'utilisation", labelEn: "User guide", url: "/docs/cv-critic-manuel.html" },

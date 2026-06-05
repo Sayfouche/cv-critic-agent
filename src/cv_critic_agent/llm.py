@@ -13,15 +13,38 @@ class TextLLM(Protocol):
         ...
 
 
+DEFAULT_MOCK_RESPONSES: dict[str, str] = {
+    # Order matters — first match wins, strategy must be tested before critic headings
+    # appear in the strategy prompt template.
+    "Tu es CV Strategy Agent": "# Strategie CV\n\n## Synthese executive\nMock strategy output.",
+    "# Rapport critique global": "# Rapport critique global\n\n## Verdict court\nMock global critic output.",
+    "# Rapport critique CV imprimable": "# Rapport critique CV imprimable\n\n## Verdict court\nMock printable CV critic output.",
+}
+
+DEFAULT_MOCK_FALLBACK = "# Strategie CV\n\n## Synthese executive\nMock strategy output."
+
+
 class MockLLM:
+    """Deterministic LLM stub for tests and `--mock` runs.
+
+    By default uses heuristic markers to pick a canned response. Tests can
+    pass `responses=` to inject custom outputs and verify pipeline behaviour
+    without depending on prompt internals.
+    """
+
+    def __init__(
+        self,
+        responses: dict[str, str] | None = None,
+        fallback: str = DEFAULT_MOCK_FALLBACK,
+    ) -> None:
+        self._responses = responses if responses is not None else DEFAULT_MOCK_RESPONSES
+        self._fallback = fallback
+
     def complete(self, prompt: str) -> str:
-        if "Tu es CV Strategy Agent" in prompt:
-            return "# Strategie CV\n\n## Synthese executive\nMock strategy output."
-        if "# Rapport critique global" in prompt:
-            return "# Rapport critique global\n\n## Verdict court\nMock global critic output."
-        if "# Rapport critique CV imprimable" in prompt:
-            return "# Rapport critique CV imprimable\n\n## Verdict court\nMock printable CV critic output."
-        return "# Strategie CV\n\n## Synthese executive\nMock strategy output."
+        for marker, response in self._responses.items():
+            if marker in prompt:
+                return response
+        return self._fallback
 
 
 def create_text_llm() -> TextLLM:

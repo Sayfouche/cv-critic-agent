@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -16,10 +16,10 @@ def strip_markdown_fence(content: str) -> str:
 
 
 def timestamp(now: datetime | None = None) -> str:
-    value = now or datetime.now(timezone.utc)
+    value = now or datetime.now(UTC)
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
 
 
 def create_run_dir(root: Path, now: datetime | None = None) -> Path:

@@ -11,6 +11,11 @@ dependencies = [
   "python-dotenv>=1.0.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.7.0",
+]
+
 [project.scripts]
 cv-critic-agent = "cv_critic_agent.main:main"
 
@@ -20,3 +25,13 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+extend-exclude = ["reports", ".venv", "legacy-node"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]  # line length handled by formatter

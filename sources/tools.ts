@@ -95,7 +95,7 @@ Lecture tactique : La preuve principale reste 15+ ans d'architecture logicielle,
     category: "project_positioning",
     content: `POSITIONNEMENT DES PROJETS IA — SAÏFALLAH MANSOUR
 SAIF-IA Chatbot : agent IA de portfolio. Objectif : qualifier recruteurs, présenter le parcours, adapter le pitch, orienter vers le contact. 6 tools, Claude Tool Use API, multi-LLM routing (Groq + Claude Haiku), streaming SSE, RAG pgvector.
-CV Critic Agent : agent interne distinct. Objectif opposé : critiquer le CV, détecter les faiblesses, challenger la crédibilité IA, générer des rapports versionnés.
+CV Critic Agent : agent interne distinct, extrait dans un repo autonome. Objectif opposé : critiquer le CV, détecter les faiblesses, challenger la crédibilité IA, générer des rapports versionnés. Migration technique documentée : Node.js legacy → script CrewAI Python → CrewAI native, avec tests mock et provider Mistral par défaut.
 Resell Radar : veille automatisée d'annonces publiques et scoring IA. Python, Playwright, Mistral LLM, Telegram alerts. Collecte contrôlée, respect des limites, aide à la décision.
 SAIF-IA est la démonstration publique : vous l'utilisez en ce moment même.`,
   },

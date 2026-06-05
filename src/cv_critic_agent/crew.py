@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 from cv_critic_agent.llm import (
     DEFAULT_ANTHROPIC_MODEL,
@@ -12,7 +12,7 @@ from cv_critic_agent.llm import (
 from cv_critic_agent.paths import project_root
 from cv_critic_agent.prompts import build_critic_prompt, build_strategy_prompt_header
 from cv_critic_agent.reports import create_run_dir, write_report, write_summary
-from cv_critic_agent.sources import REPORT_SPECS
+from cv_critic_agent.sources import spec_by_slug
 
 
 class CVCriticCrew:
@@ -29,7 +29,7 @@ class CVCriticCrew:
 
     def crew(self):
         try:
-            from crewai import Agent, Crew, LLM, Process, Task
+            from crewai import LLM, Agent, Crew, Process, Task
         except ImportError as exc:
             raise RuntimeError("Install crewai or run the lightweight CLI with --mock.") from exc
 
@@ -66,12 +66,12 @@ class CVCriticCrew:
         )
 
         task_global = Task(
-            description=build_critic_prompt(REPORT_SPECS[0], self.root),
+            description=build_critic_prompt(spec_by_slug("global"), self.root),
             expected_output="Markdown report: # Rapport critique global",
             agent=global_critic,
         )
         task_cv = Task(
-            description=build_critic_prompt(REPORT_SPECS[1], self.root),
+            description=build_critic_prompt(spec_by_slug("printable-cv"), self.root),
             expected_output="Markdown report: # Rapport critique CV imprimable",
             agent=cv_critic,
         )

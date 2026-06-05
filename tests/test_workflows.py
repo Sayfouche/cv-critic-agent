@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from cv_critic_agent.llm import MockLLM, clean_mistral_messages, create_text_llm
 from cv_critic_agent.main import run as run_native
 from cv_critic_agent.prompts import (
     build_critic_prompt,
@@ -16,8 +17,6 @@ from cv_critic_agent.prompts import (
 )
 from cv_critic_agent.reports import strip_markdown_fence
 from cv_critic_agent.sources import REPORT_SPECS
-from cv_critic_agent.llm import clean_mistral_messages, create_text_llm
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -134,6 +133,15 @@ class WorkflowTests(unittest.TestCase):
 
     def test_report_writer_strips_markdown_fences(self) -> None:
         self.assertEqual(strip_markdown_fence("```markdown\n# Title\n```"), "# Title")
+
+    def test_mock_llm_uses_injected_responses(self) -> None:
+        """MockLLM must let tests override responses to verify pipeline behaviour."""
+        custom = MockLLM(
+            responses={"# Rapport critique global": "CUSTOM_GLOBAL"},
+            fallback="CUSTOM_FALLBACK",
+        )
+        self.assertEqual(custom.complete("# Rapport critique global"), "CUSTOM_GLOBAL")
+        self.assertEqual(custom.complete("anything else"), "CUSTOM_FALLBACK")
 
     def test_strategy_prompt_includes_context_in_all_implementations(self) -> None:
         """Regression guard — every strategy entry point must inject context.md."""
