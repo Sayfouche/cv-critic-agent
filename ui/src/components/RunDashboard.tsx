@@ -2,16 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { AgentGraph } from "@/components/AgentGraph";
+import { RunSidePanel } from "@/components/RunSidePanel";
 import { useRunStream } from "@/components/useRunStream";
 import { fetchGraph, type AgentNode } from "@/lib/api";
 
 type RunDashboardProps = {
   runId: string;
 };
-
-function eventLabel(eventType: string) {
-  return eventType.replaceAll("_", " ");
-}
 
 export function RunDashboard({ runId }: RunDashboardProps) {
   const [agents, setAgents] = useState<AgentNode[]>([]);
@@ -32,6 +29,7 @@ export function RunDashboard({ runId }: RunDashboardProps) {
         : "No events";
   const streamLabel =
     stream.status === "done" ? "SSE complete" : stream.connected ? "SSE live" : "SSE replay";
+  const fileCount = stream.events.filter((event) => event.type === "file_written").length;
 
   return (
     <section className="grid flex-1 grid-cols-1 gap-5 py-8 lg:grid-cols-[1fr_320px]">
@@ -52,6 +50,8 @@ export function RunDashboard({ runId }: RunDashboardProps) {
               </span>
             </>
           ) : null}
+          <span className="h-4 w-px bg-[var(--border)]" />
+          <span className="text-[var(--muted)]">{fileCount} files</span>
         </div>
 
         {graphError || stream.error ? (
@@ -69,25 +69,7 @@ export function RunDashboard({ runId }: RunDashboardProps) {
         )}
       </div>
 
-      <aside className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Event Stream</h2>
-          <span className="font-mono text-xs text-[var(--muted)]">{stream.events.length}</span>
-        </div>
-        <div className="mt-4 space-y-3">
-          {stream.recentEvents.map((event, index) => (
-            <div key={`${event.timestamp}-${event.type}-${index}`} className="rounded-md bg-white/[0.03] px-3 py-2">
-              <p className="text-xs font-medium capitalize">{eventLabel(event.type)}</p>
-              <p className="mt-1 font-mono text-[11px] text-[var(--muted)]">
-                {new Date(event.timestamp).toLocaleTimeString()}
-              </p>
-            </div>
-          ))}
-          {!stream.recentEvents.length ? (
-            <p className="text-sm text-[var(--muted)]">Waiting for events</p>
-          ) : null}
-        </div>
-      </aside>
+      <RunSidePanel events={stream.events} recentEvents={stream.recentEvents} runId={runId} />
     </section>
   );
 }

@@ -60,6 +60,12 @@ export async function fetchSources() {
   return res.json() as Promise<{ sources: SourceItem[] }>;
 }
 
+export async function fetchSource(name: string) {
+  const res = await fetch(`${API_BASE}/api/sources/${encodeURIComponent(name)}`);
+  if (!res.ok) throw new Error("Source fetch failed");
+  return res.text();
+}
+
 export async function fetchRun(runId: string) {
   const res = await fetch(`${API_BASE}/api/runs/${runId}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Run fetch failed");
@@ -72,4 +78,10 @@ export function sseUrl(runId: string) {
 
 export function reportUrl(runId: string, slug: string) {
   return `${API_BASE}/api/runs/${runId}/reports/${slug}`;
+}
+
+export async function fetchReport(runId: string, slug: string) {
+  const res = await fetch(reportUrl(runId, slug), { cache: "no-store" });
+  if (!res.ok) throw new Error("Report fetch failed");
+  return res.text();
 }

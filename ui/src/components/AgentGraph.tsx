@@ -106,7 +106,7 @@ export function AgentGraph({ agents, states }: AgentGraphProps) {
   );
 
   return (
-    <div className="h-[460px] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]/60">
+    <div className="h-[460px] w-full overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]/60">
       <ReactFlow
         nodes={nodes}
         edges={edges}

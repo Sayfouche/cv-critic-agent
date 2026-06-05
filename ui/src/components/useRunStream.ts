@@ -77,6 +77,8 @@ export function useRunStream(runId: string) {
         setStatus(statusFromSnapshot(initial));
         setAgentStates(initial.events.reduce(applyEvent, initialAgentStates()));
 
+        if (initial.status !== "running") return;
+
         stream = new EventSource(sseUrl(runId));
         stream.onopen = () => {
           if (alive) setConnected(true);
@@ -87,6 +89,10 @@ export function useRunStream(runId: string) {
           setEvents((current) => mergeEvent(current, event));
           setStatus((current) => statusFromEvent(event, current));
           setAgentStates((current) => applyEvent(current, event));
+          if (event.type === "run_completed" || event.type === "run_failed") {
+            stream?.close();
+            setConnected(false);
+          }
         };
         stream.onerror = () => {
           if (!alive) return;
