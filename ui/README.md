@@ -29,6 +29,16 @@ Mock runs are public. Real runs require the API token configured on the Python s
 
 ## Phase 3 Scope
 
-Commit 1 adds the UI shell, landing page, API client, mock run launcher, and run route placeholder.
+Delivered:
 
-Next commits add the live SSE agent graph, source/report panels, and deployment configuration.
+- Landing page with mock run launcher.
+- Run dashboard with SSE replay.
+- Live Agent Graph showing Global Critic, Printable CV Critic, and Strategy Agent lifecycle.
+- Side panel with event log, report previews, and source snapshots.
+- API client wired to `/api/runs`, `/api/runs/{id}/events`, `/api/runs/{id}/reports/{slug}`, and `/api/sources`.
+
+Deployment target:
+
+- UI on Vercel.
+- API on Render, Fly.io, or Railway.
+- `NEXT_PUBLIC_API_URL` points to the deployed FastAPI base URL.

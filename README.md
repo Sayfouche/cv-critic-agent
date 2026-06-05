@@ -59,7 +59,9 @@ A regression test guards this separation across all three implementations.
 ```bash
 git clone https://github.com/Sayfouche/cv-critic-agent.git
 cd cv-critic-agent
-pip install -e .
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[server]"
 ```
 
 ### Run with mock LLM (no API key required)
@@ -82,6 +84,21 @@ python -m cv_critic_agent
 PYTHONPATH=src python scripts/crew_script.py --mock   # v2 (intermediate)
 node legacy-node/run.mjs --mock                       # v1 (Node.js)
 ```
+
+### Run the API and UI locally
+
+```bash
+# terminal 1 — FastAPI
+python -m cv_critic_agent --serve --port 8000
+
+# terminal 2 — Next.js UI
+cd ui
+cp .env.local.example .env.local
+npm install
+npm run dev
+```
+
+Open http://localhost:3000. The current UI launches mock runs by default. The API already supports protected real runs with `CV_CRITIC_API_TOKEN`.
 
 ## Output contract
 
@@ -151,6 +168,44 @@ tests/
 - **Ruff** lints `src/`, `tests/`, `scripts/` (rules: E, F, I, B, UP, SIM) on every push.
 - **Mock tests** run on every push via GitHub Actions.
 - **Sources drift check** scaffolded (gated until `cv-portfolio` is fetched in CI).
+
+## Deployment Plan
+
+Detailed checklist: [`docs/deployment.md`](docs/deployment.md).
+
+Recommended split:
+
+- **API**: Render, Fly.io, or Railway running the Python package.
+- **UI**: Vercel running `ui/`.
+
+API start command:
+
+```bash
+python -m cv_critic_agent --serve --host 0.0.0.0 --port $PORT
+```
+
+API environment:
+
+```bash
+CV_CRITIC_PROVIDER=mistral
+CV_CRITIC_MODEL=mistral-medium-latest
+MISTRAL_API_KEY=...
+CV_CRITIC_API_TOKEN=...
+CV_CRITIC_ALLOWED_ORIGINS=https://your-ui.vercel.app
+```
+
+UI environment:
+
+```bash
+NEXT_PUBLIC_API_URL=https://your-api.example.com
+```
+
+Deployment order:
+
+1. Deploy the API with only mock runs exposed and verify `/api/health`.
+2. Deploy the UI and point `NEXT_PUBLIC_API_URL` at the API.
+3. Set `CV_CRITIC_API_TOKEN`, enable protected API real runs, and keep the token out of public client logs.
+4. Run one protected real Mistral audit through the API, then verify `reports/latest/` plus the UI report panel for mock/demo runs.
 
 ## License
 
