@@ -78,7 +78,21 @@ def main() -> None:
         action="store_true",
         help="Use the CrewAI Agent/Task/Crew path instead of the shared workflow.",
     )
+    parser.add_argument("--serve", action="store_true", help="Start the FastAPI server instead of a CLI run.")
+    parser.add_argument("--host", default="127.0.0.1", help="API host (default 127.0.0.1).")
+    parser.add_argument("--port", type=int, default=8000, help="API port (default 8000).")
+    parser.add_argument("--reload", action="store_true", help="Auto-reload (dev only).")
     args = parser.parse_args()
+
+    if args.serve:
+        try:
+            from cv_critic_agent.api import serve
+        except ImportError as exc:
+            raise RuntimeError(
+                "Install the 'server' extra: `pip install -e '.[server]'`."
+            ) from exc
+        serve(host=args.host, port=args.port, reload=args.reload)
+        return
 
     if args.crewai_native:
         # No rich UI for the framework-driven path — CrewAI owns the loop.
