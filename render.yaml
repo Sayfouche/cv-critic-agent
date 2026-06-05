@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: cv-critic-agent-api
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: main
+    autoDeploy: true
+    pythonVersion: "3.11"
+
+    buildCommand: pip install -e '.[server]'
+    startCommand: python -m cv_critic_agent --serve --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: CV_CRITIC_PROVIDER
+        value: mistral
+      - key: CV_CRITIC_MODEL
+        value: mistral-medium-latest
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: CV_CRITIC_API_TOKEN
+        sync: false
+      - key: CV_CRITIC_ALLOWED_ORIGINS
+        sync: false
