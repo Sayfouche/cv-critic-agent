@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from cv_critic_agent.events import EventBus
 from cv_critic_agent.llm import (
     DEFAULT_ANTHROPIC_MODEL,
     DEFAULT_MISTRAL_MODEL,
@@ -23,9 +24,10 @@ class CVCriticCrew:
     inside `crew()` so unit tests and mock runs do not require network keys.
     """
 
-    def __init__(self, root: Path | None = None, mock: bool = False) -> None:
+    def __init__(self, root: Path | None = None, mock: bool = False, bus: EventBus | None = None) -> None:
         self.root = root or project_root()
         self.mock = mock
+        self.bus = bus
 
     def crew(self):
         try:
@@ -97,7 +99,7 @@ class CVCriticCrew:
         if self.mock:
             from cv_critic_agent.workflow import run_shared_workflow
 
-            return run_shared_workflow(self.root, MockLLM())
+            return run_shared_workflow(self.root, MockLLM(), bus=self.bus)
 
         crew = self.crew()
         result = crew.kickoff()
