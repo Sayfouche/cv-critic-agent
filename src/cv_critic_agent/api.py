@@ -117,8 +117,9 @@ async def create_run(
     x_api_token: str | None = Header(default=None, alias="X-API-Token"),
 ) -> dict[str, Any]:
     mock = bool(payload.get("mock", True))
+    demo_delay_ms = int(payload.get("demo_delay_ms", 0) or 0)
     _require_auth_for_real(mock, token_q, x_api_token)
-    state = _manager.create_run(mock=mock)
+    state = _manager.create_run(mock=mock, demo_delay_ms=demo_delay_ms)
     return {"run_id": state.run_id, "mock": state.mock, "status": state.status}
 
 

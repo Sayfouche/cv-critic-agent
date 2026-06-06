@@ -35,6 +35,7 @@ class RunState:
     mock: bool
     provider: str
     model: str
+    demo_delay_ms: int = 0
     started_at: float = field(default_factory=time.monotonic)
     status: str = "running"  # running | done | failed
     events: list[dict[str, Any]] = field(default_factory=list)
@@ -49,11 +50,12 @@ class RunManager:
         self._runs: dict[str, RunState] = {}
         self._lock = threading.Lock()
 
-    def create_run(self, mock: bool = True, root: Path | None = None) -> RunState:
+    def create_run(self, mock: bool = True, root: Path | None = None, demo_delay_ms: int = 0) -> RunState:
         run_id = uuid.uuid4().hex[:12]
         provider = os.environ.get("CV_CRITIC_PROVIDER", "mistral")
         model = os.environ.get("CV_CRITIC_MODEL", DEFAULT_MISTRAL_MODEL)
-        state = RunState(run_id=run_id, mock=mock, provider=provider, model=model)
+        delay = max(0, min(demo_delay_ms, 3000)) if mock else 0
+        state = RunState(run_id=run_id, mock=mock, provider=provider, model=model, demo_delay_ms=delay)
         with self._lock:
             self._runs[run_id] = state
 
@@ -120,6 +122,8 @@ class RunManager:
             state.events.append(payload)
             for queue in state.subscribers:
                 queue.put(payload)
+        if state.demo_delay_ms and event.type in {"run_started", "sources_loaded", "agent_started", "agent_completed", "file_written"}:
+            time.sleep(state.demo_delay_ms / 1000)
 
     # ── SSE subscriber API ────────────────────────────────────────────────────
     def subscribe(self, run_id: str) -> Queue | None:
