@@ -13,7 +13,7 @@ export function LaunchButton() {
     setBusy(true);
     setError(null);
     try {
-      const { run_id } = await createRun({ mock: true });
+      const { run_id } = await createRun({ mock: true, demoDelayMs: 700 });
       router.push(`/runs/${run_id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

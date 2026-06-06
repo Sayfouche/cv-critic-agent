@@ -61,7 +61,7 @@ export function RunDashboard({ runId }: RunDashboardProps) {
         ) : null}
 
         {agents.length ? (
-          <AgentGraph agents={agents} states={stream.agentStates} />
+          <AgentGraph agents={agents} events={stream.events} states={stream.agentStates} />
         ) : (
           <div className="flex h-[460px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 text-sm text-[var(--muted)]">
             Loading graph

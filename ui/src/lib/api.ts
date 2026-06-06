@@ -32,14 +32,14 @@ export type RunSnapshot = {
   events: LifecycleEvent[];
 };
 
-export async function createRun(opts: { mock: boolean; token?: string }) {
+export async function createRun(opts: { demoDelayMs?: number; mock: boolean; token?: string }) {
   const res = await fetch(`${API_BASE}/api/runs`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(opts.token ? { "X-API-Token": opts.token } : {}),
     },
-    body: JSON.stringify({ mock: opts.mock }),
+    body: JSON.stringify({ mock: opts.mock, demo_delay_ms: opts.demoDelayMs ?? 0 }),
   });
   if (!res.ok) {
     const msg = await res.text();
