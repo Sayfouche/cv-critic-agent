@@ -32,12 +32,23 @@ export type RunSnapshot = {
   events: LifecycleEvent[];
 };
 
-export async function createRun(opts: { demoDelayMs?: number; mock: boolean; token?: string }) {
+export type CreateRunResponse = {
+  run_id: string;
+  mock: boolean;
+  status: string;
+  degraded: boolean;
+};
+
+export async function createRun(opts: {
+  demoDelayMs?: number;
+  mock: boolean;
+  sessionToken?: string;
+}): Promise<CreateRunResponse> {
   const res = await fetch(`${API_BASE}/api/runs`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(opts.token ? { "X-API-Token": opts.token } : {}),
+      ...(opts.sessionToken ? { "X-Session-Token": opts.sessionToken } : {}),
     },
     body: JSON.stringify({ mock: opts.mock, demo_delay_ms: opts.demoDelayMs ?? 0 }),
   });
@@ -45,7 +56,7 @@ export async function createRun(opts: { demoDelayMs?: number; mock: boolean; tok
     const msg = await res.text();
     throw new Error(msg || `Failed to start run (${res.status})`);
   }
-  return res.json() as Promise<{ run_id: string; mock: boolean; status: string }>;
+  return res.json() as Promise<CreateRunResponse>;
 }
 
 export async function fetchGraph() {
@@ -84,4 +95,128 @@ export async function fetchReport(runId: string, slug: string) {
   const res = await fetch(reportUrl(runId, slug), { cache: "no-store" });
   if (!res.ok) throw new Error("Report fetch failed");
   return res.text();
+}
+
+// ── Access request flow (Phase 5) ────────────────────────────────────────────
+
+export type AccessRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "consumed"
+  | "expired"
+  | "revoked";
+
+export async function createAccessRequest(body: {
+  name: string;
+  company: string;
+  email: string;
+  motive: string;
+  website?: string;
+  turnstileToken?: string;
+}) {
+  const res = await fetch(`${API_BASE}/api/access-requests`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(body.turnstileToken
+        ? { "cf-turnstile-response": body.turnstileToken }
+        : {}),
+    },
+    body: JSON.stringify({
+      name: body.name,
+      company: body.company,
+      email: body.email,
+      motive: body.motive,
+      website: body.website ?? "",
+    }),
+  });
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(msg || `Submission failed (${res.status})`);
+  }
+  return res.json() as Promise<{ id: string; status: AccessRequestStatus }>;
+}
+
+export async function fetchAccessStatus(id: string) {
+  const res = await fetch(
+    `${API_BASE}/api/access-requests/${encodeURIComponent(id)}/status`,
+    { cache: "no-store" },
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Status fetch failed (${res.status})`);
+  return res.json() as Promise<{ id: string; status: AccessRequestStatus }>;
+}
+
+// ── Admin (magic link) ───────────────────────────────────────────────────────
+
+export async function adminLogin(email: string) {
+  const res = await fetch(`${API_BASE}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) throw new Error(`Login failed (${res.status})`);
+  return res.json() as Promise<{ sent: boolean }>;
+}
+
+export async function redeemMagicLink(token: string) {
+  const res = await fetch(
+    `${API_BASE}/api/admin/session/${encodeURIComponent(token)}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Magic link redemption failed (${res.status})`);
+  return res.json() as Promise<{ session_token: string }>;
+}
+
+export type AdminRequest = {
+  id: string;
+  name: string;
+  company: string;
+  email: string;
+  motive: string;
+  status: AccessRequestStatus;
+  created_at: number;
+  decided_at: number | null;
+  runs_used: number;
+  runs_quota: number;
+};
+
+export async function listAdminRequests(
+  adminSession: string,
+  filterStatus?: AccessRequestStatus,
+) {
+  const url = new URL(`${API_BASE}/api/admin/requests`);
+  if (filterStatus) url.searchParams.set("status", filterStatus);
+  const res = await fetch(url.toString(), {
+    headers: { "X-Admin-Session": adminSession },
+    cache: "no-store",
+  });
+  if (res.status === 401) throw new Error("unauthorized");
+  if (!res.ok) throw new Error(`List failed (${res.status})`);
+  return res.json() as Promise<{ requests: AdminRequest[] }>;
+}
+
+export async function adminAction(
+  adminSession: string,
+  id: string,
+  action: "approve" | "reject" | "revoke",
+) {
+  const res = await fetch(
+    `${API_BASE}/api/admin/requests/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Session": adminSession,
+      },
+      body: JSON.stringify({ action }),
+    },
+  );
+  if (res.status === 401) throw new Error("unauthorized");
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(msg || `Action failed (${res.status})`);
+  }
+  return res.json() as Promise<{ id: string; status: AccessRequestStatus }>;
 }

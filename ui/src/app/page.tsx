@@ -25,14 +25,25 @@ export default function Home() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <LaunchButton />
         <Link
+          href="/access-request"
+          className="inline-flex h-12 items-center justify-center rounded-full border border-[var(--border)] px-6 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)]/60 hover:bg-[var(--surface)]"
+        >
+          Request real-run access →
+        </Link>
+        <Link
           href="https://github.com/Sayfouche/cv-critic-agent"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex h-12 items-center justify-center rounded-full border border-[var(--border)] px-6 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)]/60 hover:bg-[var(--surface)]"
         >
-          View source on GitHub →
+          Source on GitHub
         </Link>
       </div>
+
+      <p className="text-xs text-[var(--muted)]">
+        Mock runs are instant and free — they use canned fixtures. Real runs hit the
+        LLM provider and are manually approved (one or two days).
+      </p>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[

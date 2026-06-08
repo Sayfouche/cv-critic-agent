@@ -82,9 +82,9 @@ src/cv_critic_agent/
 | S2 | ✅ done | AccessRequest model + state machine + Store |
 | S3 | ✅ done | Notifier: Telegram + Resend email |
 | S4 | ✅ done | Decision endpoints + admin magic link |
-| **S5** | ✅ done | Real run gate (session_token + IP binding + quota + budget cap) |
-| S6 | ⏭️ next | UI pages (form, status poll, access-granted, admin) |
-| S7 | ⏭️ | Polish + telemetry + README |
+| S5 | ✅ done | Real run gate (session_token + IP binding + quota + budget cap) |
+| **S6** | ✅ done | UI pages: /access-request, status poll, /access-granted, /admin/* + home CTAs |
+| S7 | ⏭️ next | Polish + telemetry + README |
 
 **Test count:** 267 green (S1–S5).
 
