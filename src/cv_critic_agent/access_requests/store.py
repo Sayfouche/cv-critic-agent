@@ -30,6 +30,10 @@ from pathlib import Path
 from cv_critic_agent.access_requests.models import (
     AccessRequest,
     AccessRequestStatus,
+    IpBindingMismatch,
+    InvalidTransition,
+    QuotaExceeded,
+    SessionExpired,
 )
 from cv_critic_agent.security.pii import decrypt_pii, encrypt_pii
 
@@ -163,6 +167,59 @@ class AccessRequestStore:
             return None
 
         return req
+
+    def atomic_consume_run(self, request_id: str, ip: str) -> AccessRequest:
+        """Consume one run under an exclusive file lock.
+
+        Critical section: read → validate → mutate → write, all while holding
+        ``LOCK_EX`` on the request file. Two concurrent calls on the same
+        request can never both increment ``runs_used`` past the quota.
+
+        Raises:
+            FileNotFoundError: request_id unknown.
+            InvalidTransition: status is not APPROVED (already consumed,
+                rejected, revoked, expired by TTL sweep, …).
+            SessionExpired: status APPROVED but ``session_expires_at`` past;
+                the record is mutated to EXPIRED and persisted before raising.
+            IpBindingMismatch: ``session_ip_binding`` is set to a different IP.
+            QuotaExceeded: ``runs_used >= runs_quota``.
+        """
+        if not ip:
+            raise ValueError("ip must be non-empty")
+        path = self._path(request_id)
+        if not path.exists():
+            raise FileNotFoundError(f"access request {request_id!r} not found")
+        with path.open("r+", encoding="utf-8") as fh:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+            try:
+                data = json.load(fh)
+                req = _from_dict(data, self._fernet_key)
+                if req.status != AccessRequestStatus.APPROVED:
+                    raise InvalidTransition(
+                        f"cannot consume run from {req.status.value}"
+                    )
+                now = time.time()
+                if (
+                    req.session_expires_at is not None
+                    and req.session_expires_at <= now
+                ):
+                    req.mark_expired()
+                    fh.seek(0)
+                    fh.write(
+                        json.dumps(_to_dict(req, self._fernet_key), ensure_ascii=False)
+                    )
+                    fh.truncate()
+                    raise SessionExpired("session past session_expires_at")
+                req.bind_ip(ip)  # raises IpBindingMismatch
+                req.consume_one_run()  # raises QuotaExceeded
+                fh.seek(0)
+                fh.write(
+                    json.dumps(_to_dict(req, self._fernet_key), ensure_ascii=False)
+                )
+                fh.truncate()
+                return req
+            finally:
+                fcntl.flock(fh, fcntl.LOCK_UN)
 
     def update(self, request: AccessRequest) -> None:
         """Overwrite an existing record.  Raises ``FileNotFoundError`` if the

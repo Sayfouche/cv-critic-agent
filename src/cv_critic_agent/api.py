@@ -84,6 +84,12 @@ def _setup_access_gate(app: FastAPI) -> None:  # noqa: F811
     else:
         app.state.ar_store = None
 
+    from cv_critic_agent.budget.tracker import BudgetTracker
+
+    daily_cap = int(os.environ.get("MAX_TOKENS_PER_DAY", "200000"))
+    budget_dir = Path(os.environ.get("BUDGET_DIR", "data/budget"))
+    app.state.budget_tracker = BudgetTracker(budget_dir, daily_cap_tokens=daily_cap)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
@@ -124,18 +130,74 @@ app.include_router(tg_router)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
-def _require_auth_for_real(mock: bool, token_query: str | None, token_header: str | None) -> None:
-    if mock:
-        return
-    expected = os.environ.get("CV_CRITIC_API_TOKEN")
-    if not expected:
+from cv_critic_agent.access_requests.models import (  # noqa: E402
+    InvalidTransition,
+    IpBindingMismatch,
+    QuotaExceeded,
+    SessionExpired,
+)
+from cv_critic_agent.security.limiter import _client_ip  # noqa: E402
+from cv_critic_agent.security.session import (  # noqa: E402
+    InvalidSessionToken,
+    SessionIpMismatch,
+    SessionNotApproved,
+    SessionQuotaExceeded,
+    verify_session,
+)
+
+
+def _consume_real_run_or_degrade(
+    request: Request, session_token: str | None
+) -> tuple[bool, bool]:
+    """Gate a real-mode run.
+
+    Returns ``(mock_to_use, degraded)``:
+        - ``(False, False)`` — session valid, run real, slot consumed.
+        - ``(True, True)``  — budget cap hit, degraded silently to mock,
+            no slot consumed.
+
+    Raises ``HTTPException`` for every other failure (missing config,
+    invalid token, not approved, IP mismatch, quota exhausted).
+    """
+    ar_store = getattr(request.app.state, "ar_store", None)
+    budget_tracker = getattr(request.app.state, "budget_tracker", None)
+    hmac_secret = getattr(request.app.state, "hmac_secret", b"")
+    if ar_store is None or budget_tracker is None or not hmac_secret:
         raise HTTPException(
             status_code=503,
-            detail="Real runs are disabled on this server (CV_CRITIC_API_TOKEN not set).",
+            detail="Real runs are disabled on this server.",
         )
-    provided = token_header or token_query
-    if provided != expected:
-        raise HTTPException(status_code=401, detail="Invalid or missing API token.")
+    if not session_token:
+        raise HTTPException(status_code=401, detail="session_token required.")
+
+    client_ip = _client_ip(request)
+    try:
+        ar = verify_session(session_token, client_ip, hmac_secret, ar_store)
+    except InvalidSessionToken:
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+    except SessionNotApproved:
+        raise HTTPException(status_code=403, detail="Session not approved.")
+    except SessionIpMismatch:
+        raise HTTPException(
+            status_code=403, detail="Session bound to a different IP."
+        )
+    except SessionQuotaExceeded:
+        raise HTTPException(status_code=403, detail="Quota exhausted.")
+
+    if budget_tracker.should_degrade():
+        return True, True
+
+    try:
+        ar_store.atomic_consume_run(ar.id, client_ip)
+    except (
+        InvalidTransition,
+        IpBindingMismatch,
+        QuotaExceeded,
+        SessionExpired,
+    ):
+        raise HTTPException(status_code=403, detail="Session no longer valid.")
+
+    return False, False
 
 
 def _safe_source_path(name: str) -> Path:
@@ -191,14 +253,23 @@ async def get_source(name: str) -> str:
 @app.post("/api/runs")
 async def create_run(
     payload: dict[str, Any],
+    request: Request,
     token_q: str | None = Query(default=None, alias="token"),
-    x_api_token: str | None = Header(default=None, alias="X-API-Token"),
+    x_session_token: str | None = Header(default=None, alias="X-Session-Token"),
 ) -> dict[str, Any]:
     mock = bool(payload.get("mock", True))
     demo_delay_ms = int(payload.get("demo_delay_ms", 0) or 0)
-    _require_auth_for_real(mock, token_q, x_api_token)
+    degraded = False
+    if not mock:
+        session_token = x_session_token or token_q
+        mock, degraded = _consume_real_run_or_degrade(request, session_token)
     state = _manager.create_run(mock=mock, demo_delay_ms=demo_delay_ms)
-    return {"run_id": state.run_id, "mock": state.mock, "status": state.status}
+    return {
+        "run_id": state.run_id,
+        "mock": state.mock,
+        "status": state.status,
+        "degraded": degraded,
+    }
 
 
 @app.get("/api/runs")

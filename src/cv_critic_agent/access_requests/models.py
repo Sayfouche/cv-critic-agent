@@ -51,6 +51,10 @@ class IpBindingMismatch(Exception):
     """Session used from a different IP than the first call."""
 
 
+class SessionExpired(Exception):
+    """Session past ``session_expires_at`` — must not be consumed."""
+
+
 @dataclass
 class AccessRequest:
     id: str

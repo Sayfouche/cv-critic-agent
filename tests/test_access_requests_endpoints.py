@@ -108,6 +108,15 @@ def setUpModule() -> None:
 
 def tearDownModule() -> None:
     global _env_patcher, _tmpdir, _client_ctx
+    # Reset app.state so subsequent test modules without lifespan get clean
+    # None values instead of inheriting our now-deleted tempdir-backed store.
+    try:
+        from cv_critic_agent.api import app
+
+        app.state.ar_store = None
+        app.state.budget_tracker = None
+    except Exception:
+        pass
     if _client_ctx is not None:
         try:
             _client_ctx.__exit__(None, None, None)

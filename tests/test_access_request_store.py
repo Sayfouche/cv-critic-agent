@@ -30,6 +30,10 @@ from cv_critic_agent.access_requests.models import (
     PENDING_TTL_SECONDS,
     AccessRequest,
     AccessRequestStatus,
+    InvalidTransition,
+    IpBindingMismatch,
+    QuotaExceeded,
+    SessionExpired,
 )
 from cv_critic_agent.access_requests.store import AccessRequestStore
 
@@ -458,6 +462,154 @@ class ConcurrencyTests(TempDirMixin):
 
         self.assertEqual(errors, [], f"unexpected errors: {errors}")
         self.assertTrue(all(e == req.email for e in emails))
+
+
+# ── atomic_consume_run ────────────────────────────────────────────────────────
+
+
+def _approved(now: float | None = None) -> AccessRequest:
+    """An AccessRequest already approved with a fresh 24h session window."""
+    req = _make()
+    req.approve()  # status → APPROVED, session_expires_at set
+    return req
+
+
+class AtomicConsumeRunTests(TempDirMixin):
+    def test_first_consume_binds_ip_and_increments(self) -> None:
+        store = _store(self.base_dir)
+        req = _approved()
+        store.create(req)
+
+        result = store.atomic_consume_run(req.id, "9.9.9.9")
+
+        self.assertEqual(result.runs_used, 1)
+        self.assertEqual(result.session_ip_binding, "9.9.9.9")
+        self.assertEqual(result.status, AccessRequestStatus.APPROVED)
+        reloaded = store.get(req.id)
+        self.assertIsNotNone(reloaded)
+        self.assertEqual(reloaded.runs_used, 1)
+        self.assertEqual(reloaded.session_ip_binding, "9.9.9.9")
+
+    def test_consume_quota_reaches_consumed_status(self) -> None:
+        store = _store(self.base_dir)
+        req = _approved()
+        store.create(req)
+
+        store.atomic_consume_run(req.id, "9.9.9.9")
+        store.atomic_consume_run(req.id, "9.9.9.9")
+        result = store.atomic_consume_run(req.id, "9.9.9.9")
+
+        self.assertEqual(result.runs_used, 3)
+        self.assertEqual(result.status, AccessRequestStatus.CONSUMED)
+
+    def test_consume_beyond_quota_raises_invalid_transition(self) -> None:
+        """Once status flips to CONSUMED, a 4th call sees a non-APPROVED status."""
+        store = _store(self.base_dir)
+        req = _approved()
+        store.create(req)
+        for _ in range(3):
+            store.atomic_consume_run(req.id, "9.9.9.9")
+
+        with self.assertRaises(InvalidTransition):
+            store.atomic_consume_run(req.id, "9.9.9.9")
+
+    def test_ip_mismatch_raises_and_does_not_increment(self) -> None:
+        store = _store(self.base_dir)
+        req = _approved()
+        store.create(req)
+        store.atomic_consume_run(req.id, "1.1.1.1")  # binds IP
+
+        with self.assertRaises(IpBindingMismatch):
+            store.atomic_consume_run(req.id, "2.2.2.2")
+
+        reloaded = store.get(req.id)
+        self.assertEqual(reloaded.runs_used, 1)
+        self.assertEqual(reloaded.session_ip_binding, "1.1.1.1")
+
+    def test_consume_on_pending_raises_invalid_transition(self) -> None:
+        store = _store(self.base_dir)
+        req = _make()  # PENDING
+        store.create(req)
+
+        with self.assertRaises(InvalidTransition):
+            store.atomic_consume_run(req.id, "9.9.9.9")
+
+    def test_consume_on_rejected_raises_invalid_transition(self) -> None:
+        store = _store(self.base_dir)
+        req = _make()
+        req.reject()
+        store.create(req)
+
+        with self.assertRaises(InvalidTransition):
+            store.atomic_consume_run(req.id, "9.9.9.9")
+
+    def test_consume_on_revoked_raises_invalid_transition(self) -> None:
+        store = _store(self.base_dir)
+        req = _approved()
+        req.revoke()
+        store.create(req)
+
+        with self.assertRaises(InvalidTransition):
+            store.atomic_consume_run(req.id, "9.9.9.9")
+
+    def test_unknown_request_id_raises_file_not_found(self) -> None:
+        store = _store(self.base_dir)
+        with self.assertRaises(FileNotFoundError):
+            store.atomic_consume_run("nonexistent", "9.9.9.9")
+
+    def test_empty_ip_raises_value_error(self) -> None:
+        store = _store(self.base_dir)
+        req = _approved()
+        store.create(req)
+        with self.assertRaises(ValueError):
+            store.atomic_consume_run(req.id, "")
+
+    def test_session_expired_marks_expired_and_raises(self) -> None:
+        store = _store(self.base_dir)
+        req = _approved()
+        req.session_expires_at = time.time() - 1
+        store.create(req)
+
+        with self.assertRaises(SessionExpired):
+            store.atomic_consume_run(req.id, "9.9.9.9")
+
+        # File persists with status = EXPIRED (so admin views can see history).
+        json_path = self.base_dir / f"{req.id}.json"
+        raw = json.loads(json_path.read_text(encoding="utf-8"))
+        self.assertEqual(raw["status"], "expired")
+
+
+class AtomicConsumeRunConcurrencyTests(TempDirMixin):
+    def test_concurrent_consume_respects_quota(self) -> None:
+        """N threads call atomic_consume_run on the same approved record; quota holds."""
+        store = _store(self.base_dir)
+        req = _approved()
+        req.runs_quota = 3
+        store.create(req)
+
+        successes: list[AccessRequest] = []
+        failures: list[Exception] = []
+
+        def _consume() -> None:
+            try:
+                successes.append(store.atomic_consume_run(req.id, "9.9.9.9"))
+            except Exception as exc:  # noqa: BLE001
+                failures.append(exc)
+
+        threads = [threading.Thread(target=_consume) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Exactly 3 successes (quota), the rest are QuotaExceeded or InvalidTransition.
+        self.assertEqual(len(successes), 3, f"successes={len(successes)} failures={failures}")
+        for exc in failures:
+            self.assertIsInstance(exc, (QuotaExceeded, InvalidTransition))
+
+        reloaded = store.get(req.id)
+        self.assertEqual(reloaded.runs_used, 3)
+        self.assertEqual(reloaded.status, AccessRequestStatus.CONSUMED)
 
 
 if __name__ == "__main__":

@@ -36,10 +36,12 @@ src/cv_critic_agent/
 ├── api.py                    FastAPI app (entrypoint for --serve mode)
 ├── access_requests/
 │   ├── models.py             AccessRequest dataclass + state machine
-│   ├── store.py              JSON-on-disk store with Fernet PII + fcntl
+│   ├── store.py              JSON-on-disk store with Fernet PII + fcntl + atomic_consume_run (S5)
 │   └── router.py             POST/GET /api/access-requests/* endpoints (S4)
 ├── admin/
 │   └── router.py             Admin magic-link + listing endpoints (S4)
+├── budget/
+│   └── tracker.py            Daily output-token tracker + 80/100% alerts (S5)
 ├── notifier/
 │   ├── telegram.py           send_owner_pending, send_budget_alert
 │   └── email.py              send_requester_approved/rejected/admin_magic_link
@@ -48,6 +50,7 @@ src/cv_critic_agent/
 │   ├── pii.py                Fernet encrypt/decrypt
 │   ├── logging_filter.py     Masks emails in logs
 │   ├── limiter.py            Module-level slowapi singleton
+│   ├── session.py            verify_session (S5)
 │   └── security_middleware.py Turnstile verify + SecurityHeadersMiddleware
 ├── telegram_webhook_router.py POST /api/telegram/webhook (S4)
 ├── run_manager.py            In-memory run state + SSE queues
@@ -78,12 +81,12 @@ src/cv_critic_agent/
 | S1 | ✅ done | Crypto, PII, logging filter, Turnstile, slowapi, headers |
 | S2 | ✅ done | AccessRequest model + state machine + Store |
 | S3 | ✅ done | Notifier: Telegram + Resend email |
-| **S4** | 🔨 **in progress** | Decision endpoints + admin magic link |
-| S5 | ⏭️ next | Real run gate (session_token, IP binding, quota, budget cap) |
-| S6 | ⏭️ | UI pages (form, status poll, access-granted, admin) |
+| S4 | ✅ done | Decision endpoints + admin magic link |
+| **S5** | ✅ done | Real run gate (session_token + IP binding + quota + budget cap) |
+| S6 | ⏭️ next | UI pages (form, status poll, access-granted, admin) |
 | S7 | ⏭️ | Polish + telemetry + README |
 
-**Test count:** 156 green (S1–S3).
+**Test count:** 267 green (S1–S5).
 
 ## Sprint 4 — Endpoints to build
 
@@ -125,6 +128,8 @@ All tokens use `security.crypto.sign_token(payload, secret, ttl_seconds)`.
 | `CV_CRITIC_BASE_URL` | decision URLs | API origin (Render URL) |
 | `CV_CRITIC_UI_URL` | session URLs | UI origin (Vercel URL) |
 | `ACCESS_REQUESTS_DIR` | store | path for JSON files (default: `data/access_requests`) |
+| `BUDGET_DIR` | budget tracker | path for per-day JSON files (default: `data/budget`) |
+| `MAX_TOKENS_PER_DAY` | budget cap | daily output-token cap before real→mock degradation (default: 200000) |
 | `MAGIC_KEY` | (future) | separate key for admin magic links if desired |
 
 ## Security notes
