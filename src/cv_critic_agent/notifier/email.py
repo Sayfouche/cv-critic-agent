@@ -103,6 +103,47 @@ async def send_requester_approved(
     )
 
 
+async def send_admin_magic_link(
+    *,
+    api_key: str,
+    from_address: str,
+    to_address: str,
+    magic_url: str,
+    http_client_factory: Callable[..., Any] | None = None,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+) -> bool:
+    """Send a magic-link login email to the admin (owner).
+
+    The link expires in 30 minutes. Plain + HTML templates included.
+    """
+    subject = "CV Critic Agent — admin login link"
+    text = (
+        "Click the link below to log in to the admin panel:\n\n"
+        f"{magic_url}\n\n"
+        "This link expires in 30 minutes.\n\n"
+        "If you did not request this, ignore this email.\n\n"
+        "— CV Critic Agent"
+    )
+    html = (
+        "<p>Click the link below to log in to the admin panel:</p>"
+        f'<p><a href="{magic_url}">Log in to admin panel</a></p>'
+        '<p style="color:#666;font-size:0.9em">This link expires in 30 minutes.</p>'
+        '<p style="color:#666;font-size:0.9em">If you did not request this, '
+        "ignore this email.</p>"
+        "<p>— CV Critic Agent</p>"
+    )
+    return await _send(
+        api_key=api_key,
+        from_address=from_address,
+        to_address=to_address,
+        subject=subject,
+        text=text,
+        html=html,
+        http_client_factory=http_client_factory,
+        timeout=timeout,
+    )
+
+
 async def send_requester_rejected(
     *,
     api_key: str,

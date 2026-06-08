@@ -1,6 +1,6 @@
 """FastAPI server exposing the CV Critic Agent over HTTP + SSE.
 
-Endpoints:
+Core endpoints (runs + sources):
     POST   /api/runs                         start a new run (mock or real)
     GET    /api/runs                         list active/recent runs
     GET    /api/runs/{run_id}                full state snapshot
@@ -11,6 +11,16 @@ Endpoints:
     GET    /api/graph                        static agent dependency topology
     GET    /api/health                       liveness probe
 
+Phase 5 — Access gate (Sprint 4+):
+    POST   /api/access-requests              submit access request
+    GET    /api/access-requests/{id}/status  public status poll
+    GET    /api/access-requests/{id}/decide  owner HMAC decision link
+    POST   /api/telegram/webhook             Telegram bot webhook
+    POST   /api/admin/login                  send admin magic link
+    GET    /api/admin/session/{token}        redeem magic link
+    GET    /api/admin/requests               list requests (admin)
+    PATCH  /api/admin/requests/{id}          approve/reject/revoke (admin)
+
 Real-mode runs require `CV_CRITIC_API_TOKEN` env var to be set on the server;
 clients pass it as `?token=...` or `X-API-Token` header. Mock runs are public.
 """
@@ -19,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -33,16 +44,83 @@ from cv_critic_agent.sources import GLOBAL_SOURCES
 
 _manager = RunManager()
 
-app = FastAPI(title="CV Critic Agent API", version="0.1.0")
+
+# ── Phase 5 lifespan: wire access-gate dependencies ──────────────────────────
+
+def _setup_access_gate(app: FastAPI) -> None:  # noqa: F811
+    """Read env vars and populate app.state with access-gate dependencies.
+
+    Called once at startup. All values default to empty strings / None so
+    the server starts cleanly even when Phase 5 vars are not configured;
+    in that case the Phase 5 endpoints return 503.
+    """
+    hmac_key = os.environ.get("HMAC_KEY", "")
+    fernet_key = os.environ.get("FERNET_KEY", "")
+
+    app.state.hmac_secret = hmac_key.encode() if hmac_key else b""
+    app.state.turnstile_secret = os.environ.get("TURNSTILE_SECRET", "")
+    app.state.tg_bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    app.state.tg_owner_chat_id = os.environ.get("TELEGRAM_OWNER_CHAT_ID", "")
+    app.state.resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    app.state.resend_from = os.environ.get(
+        "RESEND_FROM_ADDRESS", "noreply@cv-critic.saifallah.dev"
+    )
+    app.state.owner_email = os.environ.get("OWNER_EMAIL", "")
+    app.state.base_url = os.environ.get("CV_CRITIC_BASE_URL", "").rstrip("/")
+    app.state.ui_url = os.environ.get("CV_CRITIC_UI_URL", "").rstrip("/")
+    # Override-able in tests — never set from env (factory objects are not strings).
+    if not hasattr(app.state, "captcha_http_factory"):
+        app.state.captcha_http_factory = None
+    if not hasattr(app.state, "notifier_http_factory"):
+        app.state.notifier_http_factory = None
+
+    if fernet_key:
+        from cv_critic_agent.access_requests.store import AccessRequestStore
+
+        store_path = Path(
+            os.environ.get("ACCESS_REQUESTS_DIR", "data/access_requests")
+        )
+        app.state.ar_store = AccessRequestStore(store_path, fernet_key.encode())
+    else:
+        app.state.ar_store = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):  # type: ignore[type-arg]
+    _setup_access_gate(app)
+    yield
+
+
+# ── App factory ───────────────────────────────────────────────────────────────
+
+app = FastAPI(title="CV Critic Agent API", version="0.1.0", lifespan=lifespan)
 
 # CORS — UI is hosted on a different origin in production.
 _allowed_origins = os.environ.get("CV_CRITIC_ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# ── Rate limiter (slowapi) ────────────────────────────────────────────────────
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+
+from cv_critic_agent.security.limiter import limiter  # noqa: E402
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── Phase 5 routers ───────────────────────────────────────────────────────────
+from cv_critic_agent.access_requests.router import router as ar_router  # noqa: E402
+from cv_critic_agent.admin.router import router as admin_router  # noqa: E402
+from cv_critic_agent.telegram_webhook_router import router as tg_router  # noqa: E402
+
+app.include_router(ar_router)
+app.include_router(admin_router)
+app.include_router(tg_router)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
