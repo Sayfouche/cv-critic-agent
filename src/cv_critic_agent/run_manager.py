@@ -9,11 +9,13 @@ per-subscriber queue for Redis pub/sub or NATS.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import threading
 import time
 import traceback
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from queue import Empty, Queue
@@ -27,6 +29,12 @@ from cv_critic_agent.paths import project_root
 
 # Sentinel to signal the producer side is done.
 _SENTINEL: dict[str, Any] = {"__sentinel__": True}
+
+# Pessimistic per-real-run output-token estimate: 3 agents × 5 000 max_tokens.
+# Real Mistral usage is typically lower; over-counting degrades earlier, which
+# is the safer failure mode for a public-facing portfolio gate. Plumbing the
+# actual ``response.usage.completion_tokens`` is a later iteration.
+_REAL_RUN_TOKEN_ESTIMATE = 15_000
 
 
 @dataclass
@@ -42,6 +50,7 @@ class RunState:
     subscribers: list[Queue] = field(default_factory=list)
     run_dir: str | None = None
     error: str | None = None
+    budget_callback: Callable[[int], None] | None = None
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -50,12 +59,25 @@ class RunManager:
         self._runs: dict[str, RunState] = {}
         self._lock = threading.Lock()
 
-    def create_run(self, mock: bool = True, root: Path | None = None, demo_delay_ms: int = 0) -> RunState:
+    def create_run(
+        self,
+        mock: bool = True,
+        root: Path | None = None,
+        demo_delay_ms: int = 0,
+        budget_callback: Callable[[int], None] | None = None,
+    ) -> RunState:
         run_id = uuid.uuid4().hex[:12]
         provider = os.environ.get("CV_CRITIC_PROVIDER", "mistral")
         model = os.environ.get("CV_CRITIC_MODEL", DEFAULT_MISTRAL_MODEL)
         delay = max(0, min(demo_delay_ms, 3000)) if mock else 0
-        state = RunState(run_id=run_id, mock=mock, provider=provider, model=model, demo_delay_ms=delay)
+        state = RunState(
+            run_id=run_id,
+            mock=mock,
+            provider=provider,
+            model=model,
+            demo_delay_ms=delay,
+            budget_callback=budget_callback,
+        )
         with self._lock:
             self._runs[run_id] = state
 
@@ -101,6 +123,9 @@ class RunManager:
             state.run_dir = str(run_dir)
             bus.emit("run_completed", run_dir=str(run_dir), run_id=state.run_id)
             state.status = "done"
+            if not state.mock and state.budget_callback is not None:
+                with contextlib.suppress(Exception):  # pragma: no cover — fail-soft
+                    state.budget_callback(_REAL_RUN_TOKEN_ESTIMATE)
         except Exception as exc:  # pragma: no cover — surfaced via events
             state.error = str(exc)
             state.status = "failed"

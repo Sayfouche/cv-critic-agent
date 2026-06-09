@@ -146,6 +146,40 @@ from cv_critic_agent.security.session import (  # noqa: E402
 )
 
 
+def _build_budget_callback(state: Any):
+    """Closure that records a real run's output-token estimate + alerts.
+
+    Returns None when notifier or tracker is not configured — the worker
+    thread then simply skips post-run accounting. The callback is sync
+    because the run worker is a thread; we open a one-shot event loop via
+    ``asyncio.run`` and swallow any error (fail-soft notifier rule).
+    """
+    tracker = getattr(state, "budget_tracker", None)
+    bot_token = getattr(state, "tg_bot_token", "")
+    owner_chat_id = getattr(state, "tg_owner_chat_id", "")
+    factory = getattr(state, "notifier_http_factory", None)
+    if tracker is None or not bot_token or not owner_chat_id:
+        return None
+
+    from cv_critic_agent.budget.wiring import record_real_run
+
+    def callback(n_tokens: int) -> None:
+        try:
+            asyncio.run(
+                record_real_run(
+                    tracker,
+                    n_tokens,
+                    bot_token=bot_token,
+                    owner_chat_id=owner_chat_id,
+                    http_client_factory=factory,
+                )
+            )
+        except Exception:  # pragma: no cover — fail-soft
+            return
+
+    return callback
+
+
 def _consume_real_run_or_degrade(
     request: Request, session_token: str | None
 ) -> tuple[bool, bool]:
@@ -260,10 +294,15 @@ async def create_run(
     mock = bool(payload.get("mock", True))
     demo_delay_ms = int(payload.get("demo_delay_ms", 0) or 0)
     degraded = False
+    budget_callback = None
     if not mock:
         session_token = x_session_token or token_q
         mock, degraded = _consume_real_run_or_degrade(request, session_token)
-    state = _manager.create_run(mock=mock, demo_delay_ms=demo_delay_ms)
+        if not mock:
+            budget_callback = _build_budget_callback(request.app.state)
+    state = _manager.create_run(
+        mock=mock, demo_delay_ms=demo_delay_ms, budget_callback=budget_callback
+    )
     return {
         "run_id": state.run_id,
         "mock": state.mock,
