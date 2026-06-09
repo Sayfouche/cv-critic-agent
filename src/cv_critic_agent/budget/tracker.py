@@ -135,6 +135,11 @@ class BudgetTracker:
                 fh.seek(0)
                 fh.truncate()
                 fh.write(json.dumps(payload, ensure_ascii=False))
+                # Flush Python's buffer before releasing the lock so the next
+                # waiter reads the updated bytes, not the stale ones still in
+                # the buffer (manifested as off-by-one totals in concurrent
+                # add_tokens tests).
+                fh.flush()
                 return (
                     BudgetState(date=day, tokens_used=after, alerts_sent=alerts_after),
                     new_alerts,
@@ -145,6 +150,31 @@ class BudgetTracker:
     def should_degrade(self, day: str | None = None) -> bool:
         """True once today's usage hits or exceeds the daily cap."""
         return self.get(day).tokens_used >= self._cap
+
+    def cleanup_old_days(self, retain_days: int = 90, now: str | None = None) -> int:
+        """Delete per-day JSON files older than *retain_days* days.
+
+        Day comparison is lexicographic on the YYYY-MM-DD filename (since
+        days are UTC). Returns the count of files deleted. A negative
+        ``retain_days`` raises ``ValueError`` to surface accidental misuse.
+        """
+        if retain_days < 0:
+            raise ValueError("retain_days must be >= 0")
+        today = now or _today_utc()
+        try:
+            cutoff_dt = dt.datetime.strptime(today, "%Y-%m-%d").replace(tzinfo=dt.UTC)
+        except ValueError as exc:
+            raise ValueError(f"invalid now date {today!r}") from exc
+        cutoff_str = (cutoff_dt - dt.timedelta(days=retain_days)).strftime("%Y-%m-%d")
+        count = 0
+        for path in self._base_dir.glob("*.json"):
+            if path.stem < cutoff_str:
+                try:
+                    path.unlink()
+                    count += 1
+                except OSError:
+                    continue
+        return count
 
     @property
     def daily_cap(self) -> int:

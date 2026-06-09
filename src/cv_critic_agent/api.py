@@ -68,6 +68,7 @@ def _setup_access_gate(app: FastAPI) -> None:  # noqa: F811
     app.state.owner_email = os.environ.get("OWNER_EMAIL", "")
     app.state.base_url = os.environ.get("CV_CRITIC_BASE_URL", "").rstrip("/")
     app.state.ui_url = os.environ.get("CV_CRITIC_UI_URL", "").rstrip("/")
+    app.state.cleanup_secret = os.environ.get("CV_CRITIC_CLEANUP_SECRET", "")
     # Override-able in tests — never set from env (factory objects are not strings).
     if not hasattr(app.state, "captcha_http_factory"):
         app.state.captcha_http_factory = None
@@ -122,11 +123,13 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # ── Phase 5 routers ───────────────────────────────────────────────────────────
 from cv_critic_agent.access_requests.router import router as ar_router  # noqa: E402
 from cv_critic_agent.admin.router import router as admin_router  # noqa: E402
+from cv_critic_agent.cron_router import router as cron_router  # noqa: E402
 from cv_critic_agent.telegram_webhook_router import router as tg_router  # noqa: E402
 
 app.include_router(ar_router)
 app.include_router(admin_router)
 app.include_router(tg_router)
+app.include_router(cron_router)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
