@@ -52,6 +52,45 @@ A regression test guards this separation across all three implementations.
 
 `MockLLM` accepts an injectable `responses` dict, so tests can verify the pipeline behaviour without depending on prompt template internals or making any API calls. Tests cover prompt isolation, output contract parity across the three implementations, and Mistral message cleaning.
 
+## Phase 5 — Access gate
+
+Mock runs stay free for anyone. Real Mistral runs go through an approval gate: form → owner review (Telegram + email) → emailed session link. Full plan in [`docs/PHASE5_ACCESS_GATE.md`](docs/PHASE5_ACCESS_GATE.md).
+
+### Flow
+
+```
+POST /api/access-requests        Turnstile + honeypot + rate-limit + PII Fernet-encrypted at rest
+GET  /api/access-requests/{id}/status
+GET  /api/access-requests/{id}/decide        HMAC link sent to owner (idempotent, 7 d TTL)
+POST /api/telegram/webhook                   approve/reject from chat (owner chat_id verified)
+POST /api/admin/login                        magic link to OWNER_EMAIL, oracle-safe
+POST /api/runs   X-Session-Token             real run; IP-bind, quota, budget cap
+POST /api/cron/cleanup   X-Cleanup-Secret    nightly TTL sweep + budget file rotation
+```
+
+### Token taxonomy
+
+| Token | `sub` | TTL | Carrier |
+|---|---|---|---|
+| Decision link | `decide` + `accept: 0\|1` | 7 d | Owner Telegram / email |
+| Requester session | `session` | 24 h | `X-Session-Token` header |
+| Admin magic link | `admin-magic` | 30 min | Email link |
+| Admin session | `admin-session` | 24 h | `X-Admin-Session` header / localStorage |
+
+### Budget cap + degrade
+
+`BudgetTracker` meters output tokens per UTC day. At 80 % and 100 % a Telegram alert fires once (idempotent). Past 100 % real runs degrade silently to mock — the response carries `degraded: true`. Default cap: 200 000 tokens (~$5/day on Mistral medium).
+
+### What lives where
+
+- `security/` — HMAC tokens, Fernet PII, slowapi limiter, Turnstile verify, security headers.
+- `access_requests/` — dataclass + 6-state machine + JSON-on-disk store with fcntl + lazy TTL + `atomic_consume_run`.
+- `notifier/` — Telegram (owner pending, budget alert) + Resend (approved, rejected, admin magic link). Every external call is fail-soft.
+- `budget/` — daily tracker (fcntl + flush), wiring helper (`record_real_run`), 80/100 % alerts.
+- `cron_router.py` — `POST /api/cron/cleanup` (constant-time secret compare, idempotent).
+
+Backend: 288 unittest cases. No real HTTP in tests — every async client is injected via `http_client_factory=`.
+
 ## Quick start
 
 ### Install
@@ -128,20 +167,22 @@ python scripts/sync_sources.py /path/to/cv-portfolio --check   # exit 1 if drift
 ## Tests
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
+python -m pytest
 ```
 
-All tests use a mock LLM and make zero API calls. Tests cover:
+All tests use a mock LLM and make zero API calls. The Phase 5 endpoints stub HTTP via `http_client_factory=` injection — no Telegram / Resend / Turnstile traffic in CI. Coverage:
 - Prompt isolation (critics don't leak `context.md`, strategy does include it)
 - Output contract parity across the three implementations
 - Mistral message cleaning (`cache_breakpoint` stripped)
 - `context.md` regression guard
 - `MockLLM` injection contract
+- Phase 5: HMAC tokens, Fernet PII, state machine transitions, atomic run consume + IP-bind + quota, budget tracker concurrency + alert idempotence, cron cleanup auth + counts, every router endpoint negative-first.
 
 ## Architecture
 
 ```
 src/cv_critic_agent/
+├── api.py         # FastAPI app + lifespan reads env → app.state
 ├── main.py        # CLI entry point — `python -m cv_critic_agent`
 ├── crew.py        # CrewAI-native: Agent/Task/Crew, sequential process
 ├── workflow.py    # Shared workflow (used by v2 script and mock runs)
@@ -149,8 +190,16 @@ src/cv_critic_agent/
 ├── prompts.py     # Critic + strategy prompt templates
 ├── sources.py     # ReportSpec dataclass, REPORT_SPECS list, spec_by_slug lookup
 ├── reports.py     # Report writing (run/ + latest/)
+├── run_manager.py # Threaded run executor + SSE fan-out + budget callback hook
 ├── paths.py       # Path helpers
-└── env.py         # .env loader
+├── env.py         # .env loader
+├── security/      # crypto (HMAC), pii (Fernet), limiter (slowapi), session, middleware
+├── access_requests/   # models (6-state machine), store (fcntl + lazy TTL + atomic_consume_run), router
+├── admin/         # router (magic-link login + listing + PATCH actions)
+├── notifier/      # telegram.py (owner pending, budget alert) + email.py (Resend)
+├── budget/        # tracker.py (per-day fcntl JSON + alert thresholds) + wiring.py (record_real_run)
+├── telegram_webhook_router.py  # POST /api/telegram/webhook
+└── cron_router.py # POST /api/cron/cleanup
 
 scripts/
 ├── crew_script.py     # v2 — intermediate CrewAI script (uses workflow.py)
@@ -159,8 +208,7 @@ scripts/
 legacy-node/
 └── run.mjs        # v1 — Node.js plain orchestration
 
-tests/
-└── test_workflows.py  # 9 mock tests, zero API calls
+ui/                # Next.js 16 (App Router) — 8 routes incl. access-gate flow + admin panel
 ```
 
 ## CI / Quality
@@ -184,28 +232,45 @@ API start command:
 python -m cv_critic_agent --serve --host 0.0.0.0 --port $PORT
 ```
 
-API environment:
+API environment (core + Phase 5):
 
 ```bash
+# Core
 CV_CRITIC_PROVIDER=mistral
 CV_CRITIC_MODEL=mistral-medium-latest
 MISTRAL_API_KEY=...
-CV_CRITIC_API_TOKEN=...
 CV_CRITIC_ALLOWED_ORIGINS=https://your-ui.vercel.app
+
+# Phase 5 — access gate
+HMAC_KEY=...                       # secrets.token_hex(32)
+FERNET_KEY=...                     # cryptography.fernet.Fernet.generate_key()
+TURNSTILE_SECRET=...               # Cloudflare Turnstile server secret
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_OWNER_CHAT_ID=...
+RESEND_API_KEY=...
+RESEND_FROM_ADDRESS=agent@cv-critic.example.com
+OWNER_EMAIL=...
+CV_CRITIC_BASE_URL=https://api.example.com
+CV_CRITIC_UI_URL=https://ui.example.com
+MAX_TOKENS_PER_DAY=200000
+CV_CRITIC_CLEANUP_SECRET=...       # secrets.token_hex(24) — used by daily cron
 ```
 
 UI environment:
 
 ```bash
 NEXT_PUBLIC_API_URL=https://your-api.example.com
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=...
+NEXT_PUBLIC_OWNER_EMAIL=...
 ```
 
 Deployment order:
 
 1. Deploy the API with only mock runs exposed and verify `/api/health`.
 2. Deploy the UI and point `NEXT_PUBLIC_API_URL` at the API.
-3. Set `CV_CRITIC_API_TOKEN`, enable protected API real runs, and keep the token out of public client logs.
-4. Run one protected real Mistral audit through the API, then verify `reports/latest/` plus the UI report panel for mock/demo runs.
+3. Provision Phase 5 secrets (HMAC, Fernet, Turnstile, Telegram, Resend). Without them the gate endpoints return 503 — mock runs keep working.
+4. Schedule a daily `POST /api/cron/cleanup` (any cron service) with the `X-Cleanup-Secret` header.
+5. Submit one access request end-to-end (form → Telegram → email link → real run) and verify the budget tracker increments + the alert fires at 80 %.
 
 ## License
 
